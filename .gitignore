@@ -9,10 +9,7 @@ build/
 .venv/
 venv/
 
-# Models (large binaries)
-*.onnx
-*.pt
-*.pth
+# Models — kept in repo for convenience (see spikes/directml-benchmark/models/)
 
 # Captures and detection outputs
 captures/
