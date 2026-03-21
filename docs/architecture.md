@@ -289,6 +289,116 @@ Implements: InputController protocol
 
 ### 3.4 Application Layer
 
+#### CLI (cli.py)
+
+Entry point: `python -m semabot <command> [options]`
+
+Uses `argparse` with subcommands. Each command maps to a specific workflow.
+
+```
+semabot run [options]          — Run the bot (main usage)
+semabot capture [options]      — Capture test: save screenshots from Roblox
+semabot detect <image> [opts]  — Run YOLO detection on a static image
+semabot record [options]       — Record gameplay frames for training datasets
+semabot auto-label [options]   — Pre-label recorded frames using current YOLO model
+semabot export-model [options] — Download YOLO weights and export to ONNX
+```
+
+##### `semabot run`
+
+The primary command. Launches the full pipeline.
+
+```
+semabot run
+  --game PROFILE          Game profile name (loads config/games/<PROFILE>.toml)
+                          Required.
+  --config PATH           Override default bot config (default: config/default.toml)
+  --dry-run               Log actions without sending keyboard input
+  --save-detections       Save annotated frames to output/ (every Nth frame)
+  --duration SECONDS      Run for N seconds then stop (default: unlimited)
+  --log-level LEVEL       Override log level (DEBUG, INFO, WARNING, ERROR)
+```
+
+Examples:
+```bash
+# Play "Steal a Brainrot" for real
+semabot run --game steal_a_brainrot
+
+# Observe what the bot would do without pressing keys
+semabot run --game steal_a_brainrot --dry-run
+
+# Debug: save detection frames, verbose logging, 30 second run
+semabot run --game steal_a_brainrot --dry-run --save-detections --duration 30 --log-level DEBUG
+```
+
+##### `semabot capture`
+
+Diagnostic: verify screen capture works. Saves frames as PNGs.
+
+```
+semabot capture
+  --method METHOD         Capture method: "wgc" or "mss" (default: wgc)
+  --count N               Number of frames to capture (default: 5)
+  --output DIR            Output directory (default: output/captures/)
+```
+
+##### `semabot detect`
+
+Diagnostic: run YOLO detection on a saved image. Useful for testing detection quality.
+
+```
+semabot detect <image_path>
+  --config PATH           Bot config for model/threshold settings
+  --output PATH           Save annotated image (default: prints to console)
+  --threshold FLOAT       Override confidence threshold (default: from config)
+```
+
+##### `semabot record`
+
+Record gameplay frames for building training datasets. Captures frames at a configurable interval while the user plays normally.
+
+```
+semabot record
+  --output DIR            Dataset output directory (default: datasets/<timestamp>/)
+  --interval MS           Capture interval in milliseconds (default: 500)
+  --duration SECONDS      Recording duration (default: 60)
+  --method METHOD         Capture method: "wgc" or "mss" (default: wgc)
+```
+
+Output structure:
+```
+datasets/<timestamp>/
+  images/
+    frame_000001.png
+    frame_000002.png
+    ...
+  metadata.json           # recording info: game, resolution, frame count, timestamps
+```
+
+##### `semabot auto-label`
+
+Pre-label recorded frames using the current YOLO model. Generates YOLO-format annotation files (.txt per image) that can then be reviewed and corrected in an annotation tool (Label Studio, CVAT).
+
+```
+semabot auto-label
+  --dataset DIR           Path to recorded dataset (images/ subdirectory)
+  --config PATH           Bot config for model/threshold settings
+  --class-map PATH        Optional JSON mapping COCO class names to custom class IDs
+  --threshold FLOAT       Confidence threshold for auto-labels (default: 0.3)
+```
+
+Output: adds `labels/` directory alongside `images/` with YOLO-format .txt files.
+
+##### `semabot export-model`
+
+Download YOLO11n pretrained weights and export to ONNX format.
+
+```
+semabot export-model
+  --output PATH           Output path (default: models/yolo11n.onnx)
+  --input-size N          Export input size (default: 640)
+```
+
 #### BotOrchestrator
 
 The main loop. Wires all components together and runs the pipeline.
@@ -327,6 +437,133 @@ class BotOrchestrator:
 
 The orchestrator owns no business logic. It coordinates. All intelligence lives in the components it composes.
 
+### 3.5 Training Pipeline (Offline)
+
+The training pipeline runs offline and is not part of the real-time bot loop. It produces a fine-tuned ONNX model that replaces the pretrained one.
+
+Two labeling strategies are supported:
+- **Autodistill (recommended)** — Grounding DINO teacher model auto-labels from text prompts. Zero manual annotation. Runs on the remote GPU.
+- **YOLO auto-label + manual review (fallback)** — Pre-label with COCO YOLO locally, review/correct in Label Studio or CVAT. More accurate but requires manual effort.
+
+```
+ Local machine (GTX 960M)                Remote GPU (RTX PRO 6000, 96GB VRAM)
+ ┌──────────────────────────┐            ┌──────────────────────────────────┐
+ │ 1. RECORD                │            │                                  │
+ │ semabot record           │            │ 2. AUTO-LABEL (teacher model)    │
+ │ WGC capture at interval  │── images/ ─│ Grounding DINO / DINO-X          │
+ │ while user plays         │            │ Text prompts: "roblox character, │
+ └──────────────────────────┘            │  item, NPC, obstacle, shop"      │
+                                         │ -> YOLO-format .txt labels       │
+      OR (fallback):                     │ Optional: + SAM2 for masks       │
+ ┌──────────────────────────┐            ├──────────────────────────────────┤
+ │ 2b. LOCAL AUTO-LABEL     │            │ 3. TRAIN (student model)         │
+ │ semabot auto-label       │            │ scripts/train.py                 │
+ │ Pre-label with COCO YOLO │            │ YOLO11n fine-tune from labels    │
+ │ Review in Label Studio   │── labels/ ─│ epochs=100, batch=64             │
+ └──────────────────────────┘            │ Also benchmark 11s/11m variants  │
+                                         ├──────────────────────────────────┤
+                                         │ 4. EXPORT                        │
+ ┌──────────────────────────┐            │ yolo export format=onnx          │
+ │ 5. DEPLOY                │◄── .onnx ──│ Copy to local machine            │
+ │ Drop .onnx into models/  │            └──────────────────────────────────┘
+ │ Update config class_names│
+ └──────────────────────────┘
+```
+
+#### Autodistill Strategy (Zero Manual Annotation)
+
+[Grounding DINO](https://github.com/IDEA-Research/GroundingDINO) acts as a "teacher" that can detect any object described in natural language, without training. It labels the dataset, then YOLO11n (the "student") trains on those labels to run at real-time speed.
+
+```python
+# scripts/autodistill_label.py — runs on remote GPU (RTX PRO 6000)
+from autodistill_grounding_dino import GroundingDINO
+from autodistill.detection import CaptionOntology
+
+# Define what to detect with text prompts
+ontology = CaptionOntology({
+    "roblox character": "player",
+    "NPC enemy": "npc",
+    "collectible item": "item",
+    "shop sign": "shop",
+    "obstacle": "obstacle",
+})
+
+teacher = GroundingDINO(ontology=ontology, box_threshold=0.3)
+teacher.label(input_folder="datasets/my_recording/images/", output_folder="datasets/my_recording/")
+```
+
+This produces YOLO-format labels in seconds without any manual annotation. The labels can optionally be reviewed, but for many game scenarios the quality is sufficient to train directly.
+
+Key dependencies (remote GPU only): `autodistill`, `autodistill-grounding-dino`, `autodistill-yolov8` (or ultralytics directly).
+
+#### GameplayRecorder
+
+Captures frames from Roblox at a configurable interval while the user plays.
+
+```
+Responsibilities:
+  - Use FrameSource (WGC/MSS) to capture frames
+  - Save PNGs at configurable interval (default 500ms)
+  - Write metadata.json with recording info
+  - Create YOLO dataset directory structure (images/)
+
+Dependencies: FrameSource, opencv-python
+```
+
+#### AutoLabeler (local fallback)
+
+Runs the current YOLO model on recorded frames to generate initial annotations for manual review.
+
+```
+Responsibilities:
+  - Load YOLO model and run detection on each image
+  - Write YOLO-format .txt labels (class_id x_center y_center w h)
+  - Support class mapping (COCO names -> custom class IDs)
+  - Generate data.yaml for training
+
+Dependencies: Detector, core models
+```
+
+#### Training Scripts (scripts/)
+
+Standalone scripts for the remote GPU machine. Not part of the semabot package.
+
+```
+scripts/
+  autodistill_label.py    # Grounding DINO teacher labeling (recommended)
+  train.py                # YOLO fine-tuning + ONNX export
+```
+
+```python
+# scripts/train.py — usage on remote machine:
+# python scripts/train.py --data datasets/my_dataset/data.yaml --epochs 100 --batch 64
+
+from ultralytics import YOLO
+model = YOLO("yolo11n.pt")
+model.train(data="data.yaml", epochs=100, imgsz=640, batch=64, device=0)
+model.export(format="onnx", imgsz=640, opset=17, simplify=True)
+```
+
+#### Dataset Format
+
+```
+datasets/<name>/
+  images/
+    train/                    # 80% of frames
+      frame_000001.png
+      frame_000002.png
+    val/                      # 20% of frames
+      frame_000050.png
+  labels/
+    train/
+      frame_000001.txt        # YOLO format: class_id cx cy w h (normalized)
+      frame_000002.txt
+    val/
+      frame_000050.txt
+  data.yaml                   # class names, paths, nc
+  metadata.json               # recording info
+```
+
 ---
 
 ## 4. Project Structure
@@ -360,6 +597,12 @@ SeMaBot2000/
 |   |   |   |   |-- conditions.py     # HasDetection, TargetInCenter, etc.
 |   |   |   |   |-- actions.py        # NavigateToTarget, Interact, Wander
 |   |   |   |   |-- trees.py          # Tree builders per game profile
+|   |   |
+|   |   |-- training/                  # Offline training pipeline
+|   |   |   |-- __init__.py
+|   |   |   |-- recorder.py           # GameplayRecorder (capture frames at interval)
+|   |   |   |-- auto_labeler.py       # AutoLabeler (pre-label with existing YOLO)
+|   |   |   |-- dataset.py            # Dataset utilities (YOLO format, splits, validation)
 |   |   |
 |   |   |-- action/                    # Action layer
 |   |   |   |-- __init__.py
@@ -398,6 +641,10 @@ SeMaBot2000/
 |   |   |-- test_key_mapper.py
 |   |   |-- test_orchestrator.py
 |   |   |-- test_factory.py
+|   |   |-- test_cli.py
+|   |   |-- test_recorder.py
+|   |   |-- test_auto_labeler.py
+|   |   |-- test_dataset.py
 |   |-- integration/
 |   |   |-- test_detection_pipeline.py
 |   |   |-- test_full_pipeline.py
@@ -405,10 +652,15 @@ SeMaBot2000/
 |-- docs/
 |   |-- initial-research.md
 |   |-- architecture.md                # This document
+|   |-- implementation-plan.md         # Task breakdown with checkboxes
+|
+|-- datasets/                          # Recorded + annotated training data (git-ignored)
 |
 |-- scripts/
 |   |-- check.sh                       # Quality gate (black + ruff + pytest 90%+)
 |   |-- export_model.py                # Download YOLO11n weights + export to ONNX
+|   |-- autodistill_label.py           # Grounding DINO teacher labeling (remote GPU)
+|   |-- train.py                       # YOLO fine-tuning + ONNX export (remote GPU)
 |
 |-- spikes/                            # Validated spike benchmarks
 |
@@ -523,6 +775,7 @@ See [implementation-plan.md](implementation-plan.md) for the detailed task break
 | 5: Orchestration | BotOrchestrator, factory, CLI | "It's Alive" |
 | 6: Robustness | Logging, metrics, error recovery | "Rock Solid" |
 | 7: Optimization | Double-buffered capture, frame-skip | "Full Speed" |
+| 8: Training | Record, auto-label, train on remote GPU | "Custom Vision" |
 
 ---
 

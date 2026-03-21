@@ -11,10 +11,11 @@ venv/
 
 # Models — kept in repo for convenience (see spikes/directml-benchmark/models/)
 
-# Captures and detection outputs
+# Captures, detection outputs, and training datasets
 captures/
 detections/
 output/
+datasets/
 
 # Logs
 *.log

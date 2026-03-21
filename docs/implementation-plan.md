@@ -100,17 +100,21 @@ poetry add --group dev <pkg>   # add a dev dependency
 ## Phase 5: Orchestration
 
 - [ ] **5.1** `app/orchestrator.py` — BotOrchestrator (main loop, FPS tracking, graceful shutdown)
-- [ ] **5.2** `app/factory.py` — create_bot() wires all components from config
-- [ ] **5.3** `app/cli.py` — `python -m semabot` entry point with `--config`, `--game`, `--dry-run`
-- [ ] **5.4** `semabot/__main__.py`
-- [ ] **5.5** `tests/unit/test_orchestrator.py` — mock components, call order, shutdown
-- [ ] **5.6** `tests/unit/test_factory.py` — correct component types from config
-- [ ] **5.7** `scripts/export_model.py` — download YOLO11n weights + export to ONNX in `models/`
-- [ ] **5.8** `tests/integration/test_detection_pipeline.py` — preprocessor + detector on saved screenshots
-- [ ] **5.9** `tests/integration/test_full_pipeline.py` — all components with synthetic frames (no Roblox)
-- [ ] **5.10** `check.sh` passes
+- [ ] **5.2** `app/factory.py` — create_bot() wires all components from config; dry-run uses NullInputController
+- [ ] **5.3** `app/cli.py` — argparse with subcommands: `run`, `capture`, `detect`, `export-model`
+- [ ] **5.4** CLI `run` subcommand — `--game`, `--config`, `--dry-run`, `--save-detections`, `--duration`, `--log-level`
+- [ ] **5.5** CLI `capture` subcommand — `--method`, `--count`, `--output` (diagnostic: save screenshots)
+- [ ] **5.6** CLI `detect` subcommand — positional image path, `--output`, `--threshold` (diagnostic: detect on static image)
+- [ ] **5.7** CLI `export-model` subcommand — `--output`, `--input-size` (download weights + export ONNX)
+- [ ] **5.8** `semabot/__main__.py` — delegates to cli.py
+- [ ] **5.9** `tests/unit/test_orchestrator.py` — mock components, call order, shutdown
+- [ ] **5.10** `tests/unit/test_factory.py` — correct component types from config, dry-run variant
+- [ ] **5.11** `tests/unit/test_cli.py` — argument parsing for each subcommand
+- [ ] **5.12** `tests/integration/test_detection_pipeline.py` — preprocessor + detector on saved screenshots
+- [ ] **5.13** `tests/integration/test_full_pipeline.py` — all components with synthetic frames (no Roblox)
+- [ ] **5.14** `check.sh` passes
 
-> **Milestone 5: "It's Alive"** — `python -m semabot --game steal_a_brainrot` runs. `--dry-run` logs actions. Without it, character moves in Roblox.
+> **Milestone 5: "It's Alive"** — `semabot run --game steal_a_brainrot` launches the bot. `--dry-run` logs actions. `semabot capture` saves screenshots. `semabot detect` annotates a static image. All subcommands work.
 
 ---
 
@@ -138,6 +142,37 @@ poetry add --group dev <pkg>   # add a dev dependency
 
 ---
 
+## Phase 8: Custom Training Pipeline
+
+### 8a: Data Collection (local)
+
+- [ ] **8.1** `training/recorder.py` — GameplayRecorder (WGC capture at interval, saves PNGs + metadata.json)
+- [ ] **8.2** `tests/unit/test_recorder.py` — interval timing, output structure, metadata
+- [ ] **8.3** CLI `record` subcommand — `--output`, `--interval`, `--duration`, `--method`
+
+### 8b: Labeling — Local Fallback
+
+- [ ] **8.4** `training/auto_labeler.py` — AutoLabeler (run YOLO on images, write YOLO-format .txt labels)
+- [ ] **8.5** `tests/unit/test_auto_labeler.py` — label format, class mapping, threshold filtering
+- [ ] **8.6** CLI `auto-label` subcommand — `--dataset`, `--config`, `--class-map`, `--threshold`
+
+### 8c: Labeling — Autodistill / Grounding DINO (remote GPU, recommended)
+
+- [ ] **8.7** `scripts/autodistill_label.py` — Grounding DINO teacher labels from text prompts (zero manual annotation)
+- [ ] **8.8** Ontology config — define text prompt -> class name mapping per game (JSON or in script)
+
+### 8d: Dataset + Training
+
+- [ ] **8.9** `training/dataset.py` — dataset utilities (train/val split, data.yaml generation, validation)
+- [ ] **8.10** `tests/unit/test_dataset.py` — split ratios, yaml output, path validation
+- [ ] **8.11** `scripts/train.py` — YOLO fine-tuning + ONNX export (remote GPU)
+- [ ] **8.12** Documentation — training workflow in README (record -> autodistill label -> train -> deploy)
+- [ ] **8.13** `check.sh` passes
+
+> **Milestone 8: "Custom Vision"** — Record 60s of gameplay. Grounding DINO auto-labels all frames from text prompts (zero manual annotation). Train YOLO11n on remote GPU. Deploy fine-tuned ONNX model. Bot detects game-specific objects (players, NPCs, items).
+
+---
+
 ## Summary
 
 | Phase | Tasks | Milestone |
@@ -147,7 +182,8 @@ poetry add --group dev <pkg>   # add a dev dependency
 | 2: Capture + Action | 10 | "Eyes and Hands" — capture + keyboard + dry-run |
 | 3: Detection | 7 | "The Bot Can See" — YOLO pipeline |
 | 4: Behavior | 8 | "The Bot Can Think" — BT decisions |
-| 5: Orchestration | 10 | "It's Alive" — full bot runs |
+| 5: Orchestration | 14 | "It's Alive" — full bot runs |
 | 6: Robustness | 6 | "Rock Solid" — stable + observable |
 | 7: Optimization | 4 | "Full Speed" — 20+ FPS |
-| **Total** | **58** | **8 milestones** |
+| 8: Training | 13 | "Custom Vision" — Grounding DINO labels + fine-tuned YOLO |
+| **Total** | **75** | **9 milestones** |
