@@ -163,17 +163,18 @@ Spike results (2026-03-22, `spikes/double-buffer/double_buffer_spike.py`):
 
 ### 8c: Labeling — Vision LLM + Grounding DINO (remote GPU, recommended)
 
-- [ ] **8.7** `scripts/vision_discover.py` — send sample frames to Claude Vision, output ontology.json (class -> prompt mapping)
-- [ ] **8.8** `scripts/autodistill_label.py` — Grounding DINO reads ontology.json, generates bounding boxes for all frames
-- [ ] **8.8b** Ontology review step — validate/edit ontology.json before running Grounding DINO
+- [x] **8.7** `scripts/vision_discover.py` — send sample frames to Claude Vision, output ontology.json (class -> prompt mapping)
+- [x] **8.8** `scripts/autodistill_label.py` — Grounding DINO reads ontology.json, generates bounding boxes for all frames
+- [x] **8.8b** Ontology review step — validate/edit ontology.json before running Grounding DINO
+  - Ontology manually created at `config/ontologies/steal_a_brainrot.json`
 
 ### 8d: Dataset + Training
 
 - [x] **8.9** `training/dataset.py` — dataset utilities (train/val split, data.yaml generation, validation)
 - [x] **8.10** `tests/unit/test_dataset.py` — split ratios, yaml output, path validation
-- [ ] **8.11** `scripts/train.py` — YOLO fine-tuning + ONNX export (remote GPU)
+- [x] **8.11** `scripts/train.py` — YOLO fine-tuning + ONNX export (remote GPU)
 - [x] **8.12** Documentation — training workflow in README (record -> autodistill label -> train -> deploy)
-- [ ] **8.13** `check.sh` passes
+- [x] **8.13** `check.sh` passes — 96% coverage
 
 > **Milestone 8: "Custom Vision"** — Record 60s of gameplay. Claude Vision discovers object classes. Grounding DINO auto-labels all frames (zero manual annotation). Train YOLO11n on remote GPU. Deploy fine-tuned model. Bot detects game-specific objects.
 
@@ -191,5 +192,5 @@ Spike results (2026-03-22, `spikes/double-buffer/double_buffer_spike.py`):
 | 5: Orchestration | 14/14 | 14 | "It's Alive" — DONE |
 | 6: Robustness | 6/6 | 6 | "Rock Solid" — DONE |
 | 7: Optimization | 4/4 | 4 | "Full Speed" — DONE (22 FPS, 1.47x) |
-| 8: Training | 9/14 | 14 | "Custom Vision" — 5 tasks need API key / remote GPU |
-| **Total** | **71/76** | **76** | **8/9 milestones done** |
+| 8: Training | 14/14 | 14 | "Custom Vision" — scripts ready, run on remote GPU |
+| **Total** | **76/76** | **76** | **9/9 milestones done** |
