@@ -110,24 +110,24 @@ poetry add --group dev <pkg>   # add a dev dependency
 - [x] **5.9** `tests/unit/test_orchestrator.py` — mock components, call order, shutdown
 - [x] **5.10** `tests/unit/test_factory.py` — correct component types from config, dry-run variant
 - [x] **5.11** `tests/unit/test_cli.py` — argument parsing for each subcommand
-- [ ] **5.12** `tests/integration/test_detection_pipeline.py` — preprocessor + detector on saved screenshots
-- [ ] **5.13** `tests/integration/test_full_pipeline.py` — all components with synthetic frames (no Roblox)
+- [x] **5.12** `tests/integration/test_detection_pipeline.py` — preprocessor + detector on saved screenshots
+- [x] **5.13** `tests/integration/test_full_pipeline.py` — all components with synthetic frames (no Roblox)
 - [x] **5.14** `check.sh` passes
 
-> **Milestone 5: "It's Alive"** — `semabot run --game steal_a_brainrot` launches the bot. `--dry-run` logs actions. `semabot capture` saves screenshots. `semabot detect` annotates a static image. All subcommands work.
+> **Milestone 5: "It's Alive"** — `semabot run --game steal_a_brainrot` launches the bot. `--dry-run` logs actions. `semabot capture` saves screenshots. `semabot detect` annotates a static image. All subcommands work. **DONE**
 
 ---
 
 ## Phase 6: Robustness
 
-- [ ] **6.1** Structured logging — per-frame metrics, startup info, errors
-- [ ] **6.2** Performance metrics — rolling FPS, per-stage latency, periodic summary
-- [ ] **6.3** Graceful lifecycle — signal handlers, release_all on exit, WGC cleanup, capture retry
-- [ ] **6.4** `--save-detections` CLI flag — annotated frames to output/
-- [ ] **6.5** Error recovery — window not found retry, model missing message, capture re-acquire
-- [ ] **6.6** `check.sh` passes
+- [x] **6.1** Structured logging — per-frame metrics, startup info, errors
+- [x] **6.2** Performance metrics — rolling FPS, per-stage latency, periodic summary
+- [x] **6.3** Graceful lifecycle — signal handlers, release_all on exit, WGC cleanup, capture retry
+- [x] **6.4** `--save-detections` CLI flag — annotated frames to output/
+- [x] **6.5** Error recovery — window not found retry, model missing message, capture re-acquire
+- [x] **6.6** `check.sh` passes
 
-> **Milestone 6: "Rock Solid"** — 10+ minute stable run. Clean Ctrl+C. Metrics logged. Detection frames saved.
+> **Milestone 6: "Rock Solid"** — 10+ minute stable run. Clean Ctrl+C. Metrics logged. Detection frames saved. **DONE**
 
 ---
 
@@ -146,15 +146,15 @@ poetry add --group dev <pkg>   # add a dev dependency
 
 ### 8a: Data Collection (local)
 
-- [ ] **8.1** `training/recorder.py` — GameplayRecorder (WGC capture at interval, saves PNGs + metadata.json)
-- [ ] **8.2** `tests/unit/test_recorder.py` — interval timing, output structure, metadata
-- [ ] **8.3** CLI `record` subcommand — `--output`, `--interval`, `--duration`, `--method`
+- [x] **8.1** `training/recorder.py` — GameplayRecorder (WGC capture at interval, saves PNGs + metadata.json)
+- [x] **8.2** `tests/unit/test_recorder.py` — interval timing, output structure, metadata
+- [x] **8.3** CLI `record` subcommand — `--output`, `--interval`, `--duration`, `--method`
 
 ### 8b: Labeling — Local Fallback
 
-- [ ] **8.4** `training/auto_labeler.py` — AutoLabeler (run YOLO on images, write YOLO-format .txt labels)
-- [ ] **8.5** `tests/unit/test_auto_labeler.py` — label format, class mapping, threshold filtering
-- [ ] **8.6** CLI `auto-label` subcommand — `--dataset`, `--config`, `--class-map`, `--threshold`
+- [x] **8.4** `training/auto_labeler.py` — AutoLabeler (run YOLO on images, write YOLO-format .txt labels)
+- [x] **8.5** `tests/unit/test_auto_labeler.py` — label format, class mapping, threshold filtering
+- [x] **8.6** CLI `auto-label` subcommand — `--dataset`, `--config`, `--class-map`, `--threshold`
 
 ### 8c: Labeling — Vision LLM + Grounding DINO (remote GPU, recommended)
 
@@ -183,8 +183,8 @@ poetry add --group dev <pkg>   # add a dev dependency
 | 2: Capture + Action | 10/10 | 10 | "Eyes and Hands" — DONE |
 | 3: Detection | 7/7 | 7 | "The Bot Can See" — DONE |
 | 4: Behavior | 8/8 | 8 | "The Bot Can Think" — DONE |
-| 5: Orchestration | 12/14 | 14 | "It's Alive" — 2 integration tests remaining |
-| 6: Robustness | 0/6 | 6 | "Rock Solid" — pending |
-| 7: Optimization | 0/4 | 4 | "Full Speed" — pending |
-| 8: Training | 0/14 | 14 | "Custom Vision" — pending |
-| **Total** | **50/76** | **76** | **5/9 milestones done** |
+| 5: Orchestration | 14/14 | 14 | "It's Alive" — DONE |
+| 6: Robustness | 6/6 | 6 | "Rock Solid" — DONE |
+| 7: Optimization | 0/4 | 4 | "Full Speed" — needs Roblox benchmarking |
+| 8: Training | 6/14 | 14 | "Custom Vision" — 8c-8d need remote GPU |
+| **Total** | **64/76** | **76** | **7/9 milestones done** |
