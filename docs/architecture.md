@@ -156,6 +156,10 @@ class Detector(Protocol):
     """Runs object detection on a preprocessed frame."""
     def detect(self, blob: np.ndarray) -> list[Detection]: ...
 
+class StateBuilder(Protocol):
+    """Builds game state from detections and frame metadata."""
+    def build(self, detections: list[Detection], frame: np.ndarray) -> GameState: ...
+
 class DecisionEngine(Protocol):
     """Decides what action to take given the current game state."""
     def decide(self, state: GameState) -> Action: ...
@@ -240,6 +244,7 @@ Responsibilities:
   - Build immutable GameState
 
 Dependencies: core models only
+Implements: StateBuilder protocol
 ```
 
 #### BehaviorTreeEngine
@@ -410,7 +415,7 @@ class BotOrchestrator:
         frame_source: FrameSource,
         preprocessor: Preprocessor,
         detector: Detector,
-        state_builder: GameStateBuilder,
+        state_builder: StateBuilder,
         decision_engine: DecisionEngine,
         input_controller: InputController,
         config: BotConfig,
@@ -734,9 +739,11 @@ SeMaBot2000/
          |              |              |                   |
          v              v              v                   v
    wgc_source.py   preprocessor.py  engine.py    keyboard_controller.py
-   mss_source.py   detector.py      conditions.py null_controller.py
-                   state_builder.py  actions.py    key_mapper.py
-         |              |              |                   |
+   mss_source.py   detector.py        |          null_controller.py
+                   state_builder.py    +------+   key_mapper.py
+                        |           conditions.py
+                        |           actions.py
+                        |           trees.py
          +--------------+--------------+------------------+
                         |
                         v
@@ -744,9 +751,19 @@ SeMaBot2000/
                    core/protocols.py
                    core/config.py
                    core/constants.py
+
+  (offline, not in real-time pipeline)
+  training/recorder.py -----> FrameSource (capture/)
+  training/auto_labeler.py -> Detector (intelligence/)
+  training/dataset.py ------> core/
+  scripts/vision_discover.py   (standalone, anthropic API)
+  scripts/autodistill_label.py (standalone, remote GPU)
+  scripts/train.py             (standalone, remote GPU)
 ```
 
 External dependencies are isolated at the leaf level:
+
+Real-time pipeline:
 - `windows-capture` only in `wgc_source.py`
 - `mss` only in `mss_source.py`
 - `onnxruntime-directml` only in `detector.py`
@@ -754,6 +771,11 @@ External dependencies are isolated at the leaf level:
 - `py_trees` only in `intelligence/behavior/`
 - `opencv-python` only in `preprocessor.py`
 - `pywin32` only in `wgc_source.py` (window discovery)
+
+Offline scripts (remote GPU only, not in semabot package):
+- `anthropic` only in `scripts/vision_discover.py`
+- `autodistill`, `autodistill-grounding-dino` only in `scripts/autodistill_label.py`
+- `ultralytics` only in `scripts/train.py` and `scripts/export_model.py`
 
 ---
 
