@@ -99,4 +99,76 @@ poetry run python -m semabot capture --count 5
 poetry run python -m semabot detect screenshot.png
 ```
 
+## Training Pipeline
+
+Fine-tune a custom YOLO model for your target game with zero
+manual annotation. See `docs/architecture.md` Section 3.5 for
+full details.
+
+1. **Record gameplay** on the local machine:
+
+   ```bash
+   semabot record --duration 60
+   ```
+
+2. **Auto-label locally** (fallback — uses pretrained COCO YOLO):
+
+   ```bash
+   semabot auto-label --dataset datasets/my_recording
+   ```
+
+3. **Vision LLM discovery** (remote GPU — discovers game-specific
+   classes via Claude Vision):
+
+   ```bash
+   python scripts/vision_discover.py \
+       --images datasets/my_recording/images \
+       --output datasets/my_recording/ontology.json
+   ```
+
+4. **Grounding DINO labeling** (remote GPU — generates precise
+   bounding boxes from the discovered ontology):
+
+   ```bash
+   python scripts/autodistill_label.py \
+       --images datasets/my_recording/images \
+       --ontology datasets/my_recording/ontology.json \
+       --output datasets/my_recording
+   ```
+
+5. **Prepare the dataset** (split into train/val and generate
+   `data.yaml`):
+
+   ```python
+   from semabot.training.dataset import (
+       split_dataset, generate_data_yaml,
+   )
+
+   split_dataset(
+       "datasets/my_recording/images",
+       "datasets/my_recording/labels",
+       "datasets/my_dataset",
+   )
+   generate_data_yaml(
+       "datasets/my_dataset",
+       ["player", "enemy", "coin"],
+   )
+   ```
+
+6. **Train on remote GPU**:
+
+   ```bash
+   python scripts/train.py \
+       --data datasets/my_dataset/data.yaml \
+       --epochs 100 --batch 64
+   ```
+
+7. **Deploy** — copy the exported ONNX model to the local machine:
+
+   ```bash
+   cp runs/detect/train/weights/best.onnx models/
+   ```
+
+   Update the model path in your game config if needed.
+
 See `docs/architecture.md` for the full architecture, component design, and training pipeline documentation.
