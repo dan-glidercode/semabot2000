@@ -11,7 +11,7 @@ bash scripts/check.sh          # check all
 bash scripts/check.sh --fix    # auto-fix formatting + lint
 ```
 
-Enforces: **black** (formatting) + **ruff** (lint) + **pytest 90%+ coverage**.
+Enforces: **black** (formatting) + **ruff** (lint) + **flake8 cognitive complexity <=12** + **pytest 90%+ coverage**.
 
 Dependencies managed with **Poetry**. Common commands:
 ```bash
@@ -26,9 +26,9 @@ poetry add --group dev <pkg>   # add a dev dependency
 
 ## Phase 0: Project Scaffolding
 
-- [ ] **0.1** `pyproject.toml` via Poetry — metadata, dependency groups (main/dev/gpu), tool config for black/ruff/pytest. GPU group includes: onnxruntime-directml, windows-capture, pydirectinput, py-trees, pywin32, mss
-- [ ] **0.2** Directory structure — `src/semabot/{core,capture,intelligence,intelligence/behavior,action,app}/`, `tests/{unit,integration}/`, `config/games/`, `models/`
-- [ ] **0.3** `.gitignore` — models/, .venv/, __pycache__/, *.onnx, captures/, *.log
+- [ ] **0.1** `pyproject.toml` via Poetry — metadata, dependency groups (main/dev/gpu), tool config for black/ruff/pytest. Dev includes: black, ruff, pytest, pytest-cov, flake8, flake8-cognitive-complexity. GPU group includes: onnxruntime-directml, windows-capture, pydirectinput, py-trees, pywin32, mss
+- [ ] **0.2** Directory structure — `src/semabot/{core,capture,intelligence,intelligence/behavior,action,app,training}/`, `tests/{unit,integration}/`, `config/games/`, `models/`
+- [ ] **0.3** `.gitignore` — .venv/, __pycache__/, captures/, datasets/, *.log (models kept in repo)
 - [ ] **0.4** `tests/conftest.py` + placeholder test, verify `check.sh` passes
 - [ ] **0.5** `README.md` — setup instructions (`poetry install`), how to run quality gate, how to obtain YOLO model
 

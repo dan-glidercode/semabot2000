@@ -2,7 +2,8 @@
 # ==============================================================================
 # SeMaBot2000 Quality Gate
 # ==============================================================================
-# Enforces code formatting (black), linting (ruff), and test coverage (90%+).
+# Enforces code formatting (black), linting (ruff), cognitive complexity
+# (flake8), and test coverage (90%+).
 # Run this before every commit and at every implementation stage.
 #
 # Usage:
@@ -18,6 +19,7 @@ YELLOW='\033[1;33m'
 NC='\033[0m'
 
 COVERAGE_THRESHOLD=90
+MAX_COGNITIVE_COMPLEXITY=12
 SRC_DIR="src/semabot"
 TEST_DIR="tests"
 FIX_MODE=false
@@ -41,7 +43,7 @@ echo ""
 # --------------------------------------------------------------------------
 # 1. Check that source directory exists
 # --------------------------------------------------------------------------
-echo "[1/4] Checking project structure..."
+echo "[1/5] Checking project structure..."
 if [[ ! -d "$SRC_DIR" ]]; then
     warn "Source directory '$SRC_DIR' not found. Skipping code checks."
     echo ""
@@ -56,7 +58,7 @@ pass "Source directory exists"
 # 2. Formatting (black)
 # --------------------------------------------------------------------------
 echo ""
-echo "[2/4] Code formatting (black)..."
+echo "[2/5] Code formatting (black)..."
 if $FIX_MODE; then
     if python -m black "$SRC_DIR" "$TEST_DIR" 2>/dev/null; then
         pass "Formatted with black"
@@ -77,7 +79,7 @@ fi
 # 3. Linting (ruff)
 # --------------------------------------------------------------------------
 echo ""
-echo "[3/4] Linting (ruff)..."
+echo "[3/5] Linting (ruff)..."
 if $FIX_MODE; then
     if python -m ruff check --fix "$SRC_DIR" "$TEST_DIR" 2>/dev/null; then
         pass "Lint issues fixed"
@@ -95,10 +97,23 @@ else
 fi
 
 # --------------------------------------------------------------------------
-# 4. Tests + Coverage
+# 4. Cognitive complexity (flake8)
 # --------------------------------------------------------------------------
 echo ""
-echo "[4/4] Tests + coverage (pytest, threshold=${COVERAGE_THRESHOLD}%)..."
+echo "[4/5] Cognitive complexity (flake8, max=${MAX_COGNITIVE_COMPLEXITY})..."
+if python -m flake8 --max-cognitive-complexity="$MAX_COGNITIVE_COMPLEXITY" \
+    --select=CCR001 "$SRC_DIR" 2>/dev/null; then
+    pass "All functions within complexity threshold"
+else
+    fail "Functions exceed cognitive complexity ${MAX_COGNITIVE_COMPLEXITY}. Refactor into smaller functions."
+    ERRORS=$((ERRORS + 1))
+fi
+
+# --------------------------------------------------------------------------
+# 5. Tests + Coverage
+# --------------------------------------------------------------------------
+echo ""
+echo "[5/5] Tests + coverage (pytest, threshold=${COVERAGE_THRESHOLD}%)..."
 
 if [[ ! -d "$TEST_DIR" ]] || [[ -z "$(find "$TEST_DIR" -name 'test_*.py' 2>/dev/null)" ]]; then
     warn "No test files found in '$TEST_DIR'. Skipping coverage check."

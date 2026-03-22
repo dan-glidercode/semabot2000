@@ -581,7 +581,8 @@ Standalone scripts for the remote GPU machine. Not part of the semabot package.
 
 ```
 scripts/
-  autodistill_label.py    # Grounding DINO teacher labeling (recommended)
+  vision_discover.py      # Claude Vision class discovery -> ontology.json
+  autodistill_label.py    # Grounding DINO teacher labeling from ontology
   train.py                # YOLO fine-tuning + ONNX export
 ```
 
@@ -841,6 +842,8 @@ Each component is tested in isolation with mock/fake dependencies.
 |--------|------------|
 | `models.py` | BoundingBox math, immutability, equality |
 | `config.py` | TOML parsing, missing keys, game profile loading |
+| `wgc_source.py` | Lifecycle, thread safety, mocked capture |
+| `mss_source.py` | Mocked grab, region calculation |
 | `preprocessor.py` | Output shape, dtype, value range, determinism |
 | `detector.py` | Mock ONNX session, verify Detection output structure |
 | `state_builder.py` | Filtering, timestamp, immutability |
@@ -851,6 +854,10 @@ Each component is tested in isolation with mock/fake dependencies.
 | `key_mapper.py` | Control name to key string mapping, validation |
 | `orchestrator.py` | Mock components, call order, shutdown, None frame skip |
 | `factory.py` | Correct component types from config, dry-run variant |
+| `cli.py` | Argument parsing for each subcommand |
+| `recorder.py` | Interval timing, output structure, metadata |
+| `auto_labeler.py` | Label format, class mapping, threshold filtering |
+| `dataset.py` | Train/val split ratios, yaml output, path validation |
 
 ### 7.2 Integration Tests
 
@@ -876,6 +883,7 @@ Test multi-component flows with real dependencies (but not Roblox).
 | Decision | Choice | Rationale |
 |----------|--------|-----------|
 | Dependency management | Poetry | Lockfile for reproducible builds; dependency groups (main/dev/gpu); `pyproject.toml`-native |
+| Code quality | black + ruff + flake8 (cognitive complexity <=12) + pytest (90%+ coverage) | Enforced via `scripts/check.sh` at every task |
 | Screen capture | WGC via `windows-capture` | DXGI blocked by Byfron; WGC works at 60 FPS |
 | Object detection | YOLO11n ONNX | Best accuracy/speed for 4GB VRAM GPU; 26ms |
 | GPU inference | ONNX Runtime + DirectML | Bypasses CUDA/Maxwell compatibility issues |
@@ -884,6 +892,7 @@ Test multi-component flows with real dependencies (but not Roblox).
 | Preprocessing | OpenCV (cv2.resize) | 9.3x faster than PIL; native numpy |
 | Configuration | TOML files | Simple, readable, Python stdlib (tomllib) |
 | Input method | Keyboard only | Mouse movement blocked by Roblox Byfron |
+| Training labeling | Claude Vision + Grounding DINO + Autodistill | Zero manual annotation; LLM discovers classes, DINO generates boxes |
 
 ---
 
