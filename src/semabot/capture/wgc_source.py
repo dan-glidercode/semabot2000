@@ -18,14 +18,18 @@ logger = logging.getLogger(__name__)
 
 def _bgra_to_bgr(frame: np.ndarray) -> np.ndarray:
     """Convert a BGRA frame to BGR by dropping the alpha channel."""
-    return frame[:, :, :3]
+    if frame.ndim == 3 and frame.shape[2] == 4:
+        return frame[:, :, :3].copy()
+    return frame
 
 
 class WGCFrameSource:
     """FrameSource implementation backed by Windows Graphics Capture.
 
-    Implements the ``FrameSource`` protocol defined in
-    ``semabot.core.protocols``.
+    Uses the ``windows-capture`` library which provides an event-driven
+    API via ``@capture.event`` decorators.  The capture runs in a
+    background thread (``capture.start()`` blocks), and frames arrive
+    via the ``on_frame_arrived`` callback.
     """
 
     def __init__(self, window_title: str) -> None:
@@ -34,6 +38,7 @@ class WGCFrameSource:
         self._latest_frame: np.ndarray | None = None
         self._stop_event = threading.Event()
         self._thread: threading.Thread | None = None
+        self._capture_control = None
 
     # -- FrameSource protocol ----------------------------------------
 
@@ -59,6 +64,13 @@ class WGCFrameSource:
     def stop(self) -> None:
         """Signal the capture thread to stop and wait for it."""
         self._stop_event.set()
+        # If we have a capture_control reference, tell it to stop
+        ctrl = self._capture_control
+        if ctrl is not None:
+            try:
+                ctrl.stop()
+            except Exception:  # noqa: BLE001
+                pass
         if self._thread is not None:
             self._thread.join(timeout=5.0)
             self._thread = None
@@ -66,29 +78,43 @@ class WGCFrameSource:
 
     # -- internals ---------------------------------------------------
 
-    def _on_frame_arrived(self, frame: np.ndarray) -> None:
-        """Callback invoked by WindowsCapture on each new frame."""
-        bgr = _bgra_to_bgr(frame)
-        with self._lock:
-            self._latest_frame = bgr
-
     def _capture_loop(self) -> None:
-        """Background thread: find the window and run WGC capture."""
-        import win32gui  # noqa: WPS433 — lazy import
-        from windows_capture import WindowsCapture  # noqa: WPS433
-
-        hwnd = win32gui.FindWindow(None, self._window_title)
-        if not hwnd:
-            logger.error("Window '%s' not found.", self._window_title)
-            return
+        """Background thread: create WindowsCapture and run it."""
+        from windows_capture import (
+            Frame,
+            InternalCaptureControl,
+            WindowsCapture,
+        )
 
         capture = WindowsCapture(
-            hwnd=hwnd,
-            on_frame_arrived=self._on_frame_arrived,
+            cursor_capture=None,
+            draw_border=None,
+            monitor_index=None,
+            window_name=self._window_title,
         )
-        logger.debug("WindowsCapture object created for hwnd=%s", hwnd)
 
-        # Block until stop is requested.
+        source = self  # reference for closures
+
+        @capture.event
+        def on_frame_arrived(
+            frame: Frame,
+            capture_control: InternalCaptureControl,
+        ) -> None:
+            source._capture_control = capture_control
+            if source._stop_event.is_set():
+                capture_control.stop()
+                return
+            bgr = _bgra_to_bgr(frame.frame_buffer)
+            with source._lock:
+                source._latest_frame = bgr
+
+        @capture.event
+        def on_closed() -> None:
+            logger.debug("WGC capture session closed.")
+
+        logger.debug(
+            "WindowsCapture created for window '%s'",
+            self._window_title,
+        )
+        # capture.start() blocks until on_closed or capture_control.stop()
         capture.start()
-        self._stop_event.wait()
-        capture.stop()

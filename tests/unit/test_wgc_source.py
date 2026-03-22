@@ -98,15 +98,22 @@ class TestWGCFrameSourceLifecycle:
 # -------------------------------------------------------------------
 
 
+def _simulate_frame_arrival(src: WGCFrameSource, bgra: np.ndarray) -> None:
+    """Simulate what the WGC callback does: convert BGRA->BGR and store."""
+    bgr = _bgra_to_bgr(bgra)
+    with src._lock:
+        src._latest_frame = bgr
+
+
 class TestWGCFrameBuffer:
-    """Tests for the on_frame_arrived callback and buffer."""
+    """Tests for the frame buffer and thread-safe storage."""
 
     def test_callback_stores_bgr_frame(self) -> None:
         src = WGCFrameSource(window_title="TestWindow")
         bgra = np.zeros((480, 640, 4), dtype=np.uint8)
         bgra[:, :, 2] = 128  # R channel
 
-        src._on_frame_arrived(bgra)
+        _simulate_frame_arrival(src, bgra)
 
         frame = src.get_latest_frame()
         assert frame is not None
@@ -121,8 +128,8 @@ class TestWGCFrameBuffer:
         frame2 = np.zeros((100, 100, 4), dtype=np.uint8)
         frame2[:, :, 0] = 20
 
-        src._on_frame_arrived(frame1)
-        src._on_frame_arrived(frame2)
+        _simulate_frame_arrival(src, frame1)
+        _simulate_frame_arrival(src, frame2)
 
         latest = src.get_latest_frame()
         assert latest is not None
@@ -137,7 +144,7 @@ class TestWGCFrameBuffer:
             try:
                 for i in range(50):
                     bgra = np.full((10, 10, 4), i % 256, dtype=np.uint8)
-                    src._on_frame_arrived(bgra)
+                    _simulate_frame_arrival(src, bgra)
             except Exception as exc:  # noqa: BLE001
                 errors.append(exc)
 
