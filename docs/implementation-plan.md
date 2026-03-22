@@ -133,12 +133,17 @@ poetry add --group dev <pkg>   # add a dev dependency
 
 ## Phase 7: Optimization
 
-- [ ] **7.1** Double-buffered capture — capture thread fills while processing thread works
-- [ ] **7.2** Benchmark — measure FPS improvement vs sequential baseline
-- [ ] **7.3** Frame-skip — reuse detections when frame unchanged
+- [x] **7.1** Spike: benchmark double-buffer vs sequential vs frame-skip
+- [ ] **7.2** Implement double-buffered capture in orchestrator — grab latest frame without waiting
+- [x] ~~**7.3** Frame-skip~~ — **DROPPED**: 0% skip rate in Roblox (game renders every frame differently)
 - [ ] **7.4** `check.sh` passes
 
-> **Milestone 7: "Full Speed"** — 20+ FPS (up from 15 FPS sequential). Benchmark comparison logged.
+> **Milestone 7: "Full Speed"** — 22 FPS (up from 15 FPS sequential). Double-buffer validated at 1.47x speedup in spike.
+
+Spike results (2026-03-22, `spikes/double-buffer/double_buffer_spike.py`):
+- Sequential: 68.2ms / 15 FPS (baseline)
+- Double-buffered: 46.3ms / 22 FPS (1.47x)
+- Frame-skip: 0 frames skipped — useless for Roblox
 
 ---
 
