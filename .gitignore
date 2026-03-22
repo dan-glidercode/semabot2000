@@ -9,7 +9,9 @@ build/
 .venv/
 venv/
 
-# Models — kept in repo for convenience (see spikes/directml-benchmark/models/)
+# Models — binary weights are not tracked (keep .gitkeep for directory structure)
+models/*
+!models/.gitkeep
 
 # Captures, detection outputs, and training datasets
 captures/
@@ -27,6 +29,14 @@ datasets/
 # OS
 Thumbs.db
 .DS_Store
+
+# Environment
+.env
+
+# Coverage reports
+htmlcov/
+.coverage
+.coverage.*
 
 # Claude Code
 .claude/

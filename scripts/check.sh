@@ -118,19 +118,21 @@ echo "[5/5] Tests + coverage (pytest, threshold=${COVERAGE_THRESHOLD}%)..."
 if [[ ! -d "$TEST_DIR" ]] || [[ -z "$(find "$TEST_DIR" -name 'test_*.py' 2>/dev/null)" ]]; then
     warn "No test files found in '$TEST_DIR'. Skipping coverage check."
 else
+    PYTEST_EXIT=0
     COVERAGE_REPORT=$(python -m pytest "$TEST_DIR" \
         --cov="$SRC_DIR" \
         --cov-report=term-missing \
         --cov-fail-under="$COVERAGE_THRESHOLD" \
-        -q 2>&1) || true
+        -q 2>&1) || PYTEST_EXIT=$?
 
-    if echo "$COVERAGE_REPORT" | grep -q "FAILED\|ERROR"; then
-        fail "Tests failed"
-        echo "$COVERAGE_REPORT" | tail -20
-        ERRORS=$((ERRORS + 1))
-    elif echo "$COVERAGE_REPORT" | grep -q "Required test coverage of ${COVERAGE_THRESHOLD}%"; then
-        fail "Coverage below ${COVERAGE_THRESHOLD}%"
-        echo "$COVERAGE_REPORT" | grep -E "^(TOTAL|Required)" | head -5
+    if [[ $PYTEST_EXIT -ne 0 ]]; then
+        # Distinguish test failures from coverage failures
+        if echo "$COVERAGE_REPORT" | grep -q "FAILED\|error"; then
+            fail "Tests failed"
+        else
+            fail "Coverage below ${COVERAGE_THRESHOLD}%"
+        fi
+        echo "$COVERAGE_REPORT" | tail -10
         ERRORS=$((ERRORS + 1))
     else
         TOTAL_LINE=$(echo "$COVERAGE_REPORT" | grep "^TOTAL" | head -1)
