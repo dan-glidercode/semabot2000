@@ -169,10 +169,10 @@ Spike results (2026-03-22, `spikes/double-buffer/double_buffer_spike.py`):
 
 ### 8d: Dataset + Training
 
-- [ ] **8.9** `training/dataset.py` — dataset utilities (train/val split, data.yaml generation, validation)
-- [ ] **8.10** `tests/unit/test_dataset.py` — split ratios, yaml output, path validation
+- [x] **8.9** `training/dataset.py` — dataset utilities (train/val split, data.yaml generation, validation)
+- [x] **8.10** `tests/unit/test_dataset.py` — split ratios, yaml output, path validation
 - [ ] **8.11** `scripts/train.py` — YOLO fine-tuning + ONNX export (remote GPU)
-- [ ] **8.12** Documentation — training workflow in README (record -> autodistill label -> train -> deploy)
+- [x] **8.12** Documentation — training workflow in README (record -> autodistill label -> train -> deploy)
 - [ ] **8.13** `check.sh` passes
 
 > **Milestone 8: "Custom Vision"** — Record 60s of gameplay. Claude Vision discovers object classes. Grounding DINO auto-labels all frames (zero manual annotation). Train YOLO11n on remote GPU. Deploy fine-tuned model. Bot detects game-specific objects.
@@ -191,5 +191,5 @@ Spike results (2026-03-22, `spikes/double-buffer/double_buffer_spike.py`):
 | 5: Orchestration | 14/14 | 14 | "It's Alive" — DONE |
 | 6: Robustness | 6/6 | 6 | "Rock Solid" — DONE |
 | 7: Optimization | 4/4 | 4 | "Full Speed" — DONE (22 FPS, 1.47x) |
-| 8: Training | 6/14 | 14 | "Custom Vision" — 8c-8d need remote GPU |
-| **Total** | **68/76** | **76** | **8/9 milestones done** |
+| 8: Training | 9/14 | 14 | "Custom Vision" — 5 tasks need API key / remote GPU |
+| **Total** | **71/76** | **76** | **8/9 milestones done** |
