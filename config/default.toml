@@ -1,0 +1,21 @@
+[bot]
+target_fps = 25
+log_level = "INFO"
+
+[capture]
+method = "wgc"               # "wgc" or "mss"
+window_title = "Roblox"
+
+[detection]
+model_path = "models/yolo11n.onnx"
+provider = "DmlExecutionProvider"
+confidence_threshold = 0.35
+input_size = 640
+nms_iou_threshold = 0.5
+
+[decision]
+tree_tick_rate_hz = 25        # match target FPS
+
+[action]
+method = "pydirectinput"
+key_hold_duration_ms = 50     # min time to hold a key per frame

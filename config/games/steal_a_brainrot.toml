@@ -1,0 +1,22 @@
+[game]
+name = "Steal a Brainrot"
+window_title = "Roblox"
+
+[controls]
+move_forward = "w"
+move_backward = "s"
+move_left = "a"
+move_right = "d"
+camera_left = "left"
+camera_right = "right"
+jump = "space"
+interact = "e"
+
+[detection]
+target_classes = ["person"]
+target_min_confidence = 0.4
+
+[behavior]
+approach_tolerance_px = 60    # pixel offset to consider "centered"
+close_enough_bbox_height = 200  # bbox height threshold for "close"
+wander_cycle_ticks = 30       # ticks per wander direction change
