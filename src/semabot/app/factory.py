@@ -74,6 +74,7 @@ def create_bot(
     config_path: str | Path,
     game_profile_path: str | Path,
     dry_run: bool = False,
+    save_detections: bool = False,
 ) -> BotOrchestrator:
     """Assemble a fully-wired :class:`BotOrchestrator`.
 
@@ -86,6 +87,8 @@ def create_bot(
     dry_run:
         When *True*, use a :class:`NullInputController` that
         logs actions instead of sending real key presses.
+    save_detections:
+        When *True*, save annotated frames to disk.
 
     Returns
     -------
@@ -121,4 +124,5 @@ def create_bot(
         decision_engine=decision_engine,
         input_controller=input_controller,
         config=config,
+        save_detections=save_detections,
     )

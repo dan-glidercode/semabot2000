@@ -6,7 +6,6 @@ import time
 from unittest.mock import MagicMock
 
 import numpy as np
-import pytest
 
 from semabot.app.orchestrator import BotOrchestrator
 from semabot.core.models import Action, Detection, GameState
@@ -142,14 +141,78 @@ class TestShutdown:
         comps["frame_source"].stop.assert_called_once()
         comps["input_controller"].release_all.assert_called_once()
 
-    def test_release_all_called_on_exception(self) -> None:
-        """release_all is called even when an error occurs."""
-        comps = _make_components()
-        comps["preprocessor"].process.side_effect = RuntimeError("boom")
-        orch = BotOrchestrator(**comps)
+    def test_release_all_called_on_repeated_errors(self) -> None:
+        """release_all is called even when every tick raises.
 
-        with pytest.raises(RuntimeError, match="boom"):
-            orch.run(duration=0.5)
+        Non-fatal errors are caught by error recovery so the loop
+        continues until the duration expires. Cleanup still runs.
+        """
+        comps = _make_components()
+        comps["preprocessor"].process.side_effect = RuntimeError(
+            "boom",
+        )
+        orch = BotOrchestrator(**comps)
+        orch.run(duration=0.1)
 
         comps["frame_source"].stop.assert_called_once()
         comps["input_controller"].release_all.assert_called_once()
+
+
+class TestSaveDetections:
+    """Test the --save-detections feature."""
+
+    def test_save_detections_creates_files(self, tmp_path: object) -> None:
+        from semabot.core.models import BoundingBox
+
+        comps = _make_components()
+        det = Detection(
+            class_name="person",
+            confidence=0.8,
+            bbox=BoundingBox(x1=10, y1=20, x2=100, y2=200),
+        )
+        comps["detector"].detect.return_value = [det]
+        comps["state_builder"].build.return_value = GameState(
+            detections=(det,),
+            frame_width=640,
+            frame_height=480,
+            timestamp=time.time(),
+        )
+
+        save_dir = str(tmp_path)  # type: ignore[union-attr]
+        orch = BotOrchestrator(
+            **comps,
+            save_detections=True,
+            save_dir=save_dir,
+        )
+        orch.run(duration=0.15)
+
+        import os
+
+        files = os.listdir(save_dir)
+        assert len(files) > 0, "Should have saved at least one annotated frame"
+
+    def test_save_detections_off_by_default(self) -> None:
+        comps = _make_components()
+        orch = BotOrchestrator(**comps)
+        assert orch._save_detections is False
+
+
+class TestStaticHelpers:
+    """Test static helper methods."""
+
+    def test_maybe_log_fps_returns_updated_time(self) -> None:
+        now = time.monotonic()
+        result = BotOrchestrator._maybe_log_fps(100, now - 6.0, now - 6.0)
+        assert result > now - 6.0
+
+    def test_maybe_log_fps_skips_when_recent(self) -> None:
+        now = time.monotonic()
+        old_log = now - 1.0
+        result = BotOrchestrator._maybe_log_fps(50, now - 10.0, old_log)
+        assert result == old_log
+
+    def test_should_stop_with_none_duration(self) -> None:
+        assert BotOrchestrator._should_stop(time.monotonic(), None) is False
+
+    def test_should_stop_with_expired_duration(self) -> None:
+        assert BotOrchestrator._should_stop(time.monotonic() - 10, 5.0) is True

@@ -68,9 +68,23 @@ class YoloDetector:
     # ------------------------------------------------------------------
 
     def _ensure_session(self) -> None:
-        """Create the ONNX inference session if it does not exist."""
+        """Create the ONNX inference session if it does not exist.
+
+        Raises
+        ------
+        FileNotFoundError
+            If the model file does not exist on disk.
+        """
         if self._session is not None:
             return
+
+        from pathlib import Path
+
+        model = Path(self._model_path)
+        if not model.exists():
+            msg = f"ONNX model file not found: {self._model_path}"
+            raise FileNotFoundError(msg)
+
         import onnxruntime as ort
 
         self._session = ort.InferenceSession(

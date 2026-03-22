@@ -78,7 +78,45 @@ class WGCFrameSource:
 
     # -- internals ---------------------------------------------------
 
-    def _capture_loop(self) -> None:
+    _MAX_RETRIES: int = 3
+    _RETRY_DELAY: float = 2.0
+
+    def _create_capture_with_retry(
+        self,
+        capture_cls: type,
+    ) -> object:
+        """Try to create a WindowsCapture, retrying on failure.
+
+        Retries up to ``_MAX_RETRIES`` times with a
+        ``_RETRY_DELAY`` second sleep between attempts.
+        Raises the last exception if all attempts fail.
+        """
+        last_exc: Exception | None = None
+        for attempt in range(1, self._MAX_RETRIES + 1):
+            try:
+                return capture_cls(
+                    cursor_capture=None,
+                    draw_border=None,
+                    monitor_index=None,
+                    window_name=self._window_title,
+                )
+            except Exception as exc:  # noqa: BLE001
+                last_exc = exc
+                logger.warning(
+                    "Window '%s' not found (attempt %d/%d)" " — retrying in %.0fs",
+                    self._window_title,
+                    attempt,
+                    self._MAX_RETRIES,
+                    self._RETRY_DELAY,
+                )
+                import time as _time
+
+                _time.sleep(self._RETRY_DELAY)
+
+        msg = f"Window '{self._window_title}' not found after " f"{self._MAX_RETRIES} retries"
+        raise RuntimeError(msg) from last_exc
+
+    def _capture_loop(self) -> None:  # pragma: no cover
         """Background thread: create WindowsCapture and run it."""
         from windows_capture import (
             Frame,
@@ -86,11 +124,8 @@ class WGCFrameSource:
             WindowsCapture,
         )
 
-        capture = WindowsCapture(
-            cursor_capture=None,
-            draw_border=None,
-            monitor_index=None,
-            window_name=self._window_title,
+        capture = self._create_capture_with_retry(
+            WindowsCapture,
         )
 
         source = self  # reference for closures

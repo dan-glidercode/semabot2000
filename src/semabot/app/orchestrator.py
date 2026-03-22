@@ -3,11 +3,18 @@
 from __future__ import annotations
 
 import logging
+import signal
 import time
+from pathlib import Path
 from typing import TYPE_CHECKING
 
+from semabot.app.metrics import PipelineMetrics
+
 if TYPE_CHECKING:
+    import numpy as np
+
     from semabot.core.config import BotConfig
+    from semabot.core.models import Detection
     from semabot.core.protocols import (
         DecisionEngine,
         Detector,
@@ -38,6 +45,8 @@ class BotOrchestrator:
         decision_engine: DecisionEngine,
         input_controller: InputController,
         config: BotConfig,
+        save_detections: bool = False,
+        save_dir: str = "output/detections",
     ) -> None:
         self._frame_source = frame_source
         self._preprocessor = preprocessor
@@ -47,6 +56,9 @@ class BotOrchestrator:
         self._input_controller = input_controller
         self._config = config
         self._running = False
+        self._metrics = PipelineMetrics()
+        self._save_detections = save_detections
+        self._save_dir = save_dir
 
     # -- public API ---------------------------------------------------
 
@@ -59,6 +71,8 @@ class BotOrchestrator:
             If set, stop after this many seconds.  If *None*,
             run until :meth:`stop` is called.
         """
+        self._install_signal_handler()
+        self._log_startup()
         self._running = True
         self._frame_source.start()
         try:
@@ -73,38 +87,164 @@ class BotOrchestrator:
 
     # -- internals ----------------------------------------------------
 
+    def _install_signal_handler(self) -> None:
+        """Register SIGINT handler that calls :meth:`stop`."""
+        try:
+            signal.signal(signal.SIGINT, self._on_sigint)
+        except (OSError, ValueError):
+            # Cannot set signal handler from a non-main thread
+            pass
+
+    def _on_sigint(
+        self,
+        signum: int,
+        frame: object,
+    ) -> None:
+        """Handle SIGINT by requesting a clean shutdown."""
+        logger.info("SIGINT received — stopping.")
+        self.stop()
+
+    def _log_startup(self) -> None:
+        """Log startup configuration at INFO level."""
+        logger.info(
+            "Starting orchestrator — " "model=%s window=%s provider=%s",
+            self._config.detection.model_path,
+            self._config.capture.window_title,
+            self._config.detection.provider,
+        )
+
     def _loop(self, duration: float | None) -> None:
         """Core loop: capture, process, decide, act."""
         frame_count = 0
         start_time = time.monotonic()
         last_fps_log = start_time
+        last_metrics_log = start_time
 
         while self._running:
             if self._should_stop(start_time, duration):
                 break
 
-            if not self._tick():
+            if not self._tick_safe(frame_count):
+                time.sleep(0.001)
                 continue
 
             frame_count += 1
+            now = time.monotonic()
             last_fps_log = self._maybe_log_fps(
                 frame_count,
                 start_time,
                 last_fps_log,
             )
+            last_metrics_log = self._maybe_log_metrics(
+                now,
+                last_metrics_log,
+            )
 
-    def _tick(self) -> bool:
-        """Run one pipeline iteration.  Return True if a frame was processed."""
+    def _tick_safe(self, frame_count: int) -> bool:
+        """Run one pipeline tick, catching non-fatal errors."""
+        try:
+            return self._tick(frame_count)
+        except Exception:
+            logger.exception(
+                "Non-fatal error in pipeline tick",
+            )
+            return False
+
+    def _tick(self, frame_count: int) -> bool:
+        """Run one pipeline iteration.
+
+        Return True if a frame was processed.
+        """
+        self._metrics.begin_frame()
+
         frame = self._frame_source.get_latest_frame()
+        self._metrics.record("capture")
+
         if frame is None:
             return False
 
         blob = self._preprocessor.process(frame)
+        self._metrics.record("preprocess")
+
         detections = self._detector.detect(blob)
+        self._metrics.record("detect")
+
         state = self._state_builder.build(detections, frame)
+        self._metrics.record("postprocess")
+
         action = self._decision_engine.decide(state)
+        self._metrics.record("decide")
+
         self._input_controller.execute(action)
+        self._metrics.record("act")
+
+        self._metrics.end_frame()
+
+        logger.debug(
+            "Frame: %d detections — %s",
+            len(state.detections),
+            action.description or "(idle)",
+        )
+
+        if self._save_detections:
+            self._maybe_save_frame(
+                frame,
+                detections,
+                frame_count,
+            )
+
         return True
+
+    def _maybe_save_frame(
+        self,
+        frame: np.ndarray,
+        detections: list[Detection],
+        frame_count: int,
+    ) -> None:
+        """Save annotated frame every 10th frame."""
+        if frame_count % 10 != 0:
+            return
+        self._save_annotated(frame, detections, frame_count)
+
+    def _save_annotated(
+        self,
+        frame: np.ndarray,
+        detections: list[Detection],
+        frame_count: int,
+    ) -> None:
+        """Draw bboxes on *frame* and write to *save_dir*."""
+        import cv2
+
+        out_dir = Path(self._save_dir)
+        out_dir.mkdir(parents=True, exist_ok=True)
+
+        annotated = frame.copy()
+        for det in detections:
+            x1 = int(det.bbox.x1)
+            y1 = int(det.bbox.y1)
+            x2 = int(det.bbox.x2)
+            y2 = int(det.bbox.y2)
+            cv2.rectangle(
+                annotated,
+                (x1, y1),
+                (x2, y2),
+                (0, 255, 0),
+                2,
+            )
+            label = f"{det.class_name} {det.confidence:.2f}"
+            cv2.putText(
+                annotated,
+                label,
+                (x1, y1 - 5),
+                cv2.FONT_HERSHEY_SIMPLEX,
+                0.5,
+                (0, 255, 0),
+                1,
+            )
+
+        path = out_dir / f"frame_{frame_count:06d}.png"
+        cv2.imwrite(str(path), annotated)
+        logger.debug("Saved detection frame: %s", path)
 
     @staticmethod
     def _should_stop(
@@ -136,4 +276,15 @@ class BotOrchestrator:
                 frame_count,
                 elapsed,
             )
+        return now
+
+    def _maybe_log_metrics(
+        self,
+        now: float,
+        last_log: float,
+    ) -> float:
+        """Log pipeline metrics every 5 seconds."""
+        if now - last_log < 5.0:
+            return last_log
+        self._metrics.log_summary()
         return now

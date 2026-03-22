@@ -229,6 +229,48 @@ class TestHandleExportModel:
         assert "export" in captured.out.lower() or "Export" in captured.out
 
 
+class TestHandleRecord:
+    """Test the ``record`` handler."""
+
+    @patch("semabot.app.cli._handle_record")
+    def test_main_dispatches_record(self, mock_handler: MagicMock) -> None:
+        main(["record"])
+        mock_handler.assert_called_once()
+
+
+class TestHandleAutoLabel:
+    """Test the ``auto-label`` handler."""
+
+    @patch("semabot.app.cli._handle_auto_label")
+    def test_main_dispatches_auto_label(self, mock_handler: MagicMock) -> None:
+        main(["auto-label", "--dataset", "some/dir"])
+        mock_handler.assert_called_once()
+
+
+class TestRecordParser:
+    """Argument parsing for the ``record`` subcommand."""
+
+    def test_record_defaults(self) -> None:
+        args = parse_args(["record"])
+        assert args.command == "record"
+        assert args.interval == 500
+        assert args.duration == 60.0
+        assert args.method == "wgc"
+
+
+class TestAutoLabelParser:
+    """Argument parsing for the ``auto-label`` subcommand."""
+
+    def test_auto_label_requires_dataset(self) -> None:
+        with pytest.raises(SystemExit):
+            parse_args(["auto-label"])
+
+    def test_auto_label_dataset(self) -> None:
+        args = parse_args(["auto-label", "--dataset", "my/data"])
+        assert args.command == "auto-label"
+        assert args.dataset == "my/data"
+
+
 class TestMainNoCommand:
     """Test main with no subcommand."""
 

@@ -33,6 +33,8 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     _add_capture_parser(sub)
     _add_detect_parser(sub)
     _add_export_model_parser(sub)
+    _add_record_parser(sub)
+    _add_auto_label_parser(sub)
 
     return parser.parse_args(argv)
 
@@ -144,12 +146,72 @@ def _add_export_model_parser(
     )
 
 
+def _add_record_parser(
+    sub: argparse._SubParsersAction,
+) -> None:
+    """Register the ``record`` subcommand."""
+    p = sub.add_parser("record", help="Record gameplay frames")
+    p.add_argument(
+        "--output",
+        default="datasets/recording",
+        help="Output directory",
+    )
+    p.add_argument(
+        "--interval",
+        type=int,
+        default=500,
+        help="Capture interval in milliseconds",
+    )
+    p.add_argument(
+        "--duration",
+        type=float,
+        default=60.0,
+        help="Recording duration in seconds",
+    )
+    p.add_argument(
+        "--method",
+        default="wgc",
+        help="Capture method: wgc or mss",
+    )
+
+
+def _add_auto_label_parser(
+    sub: argparse._SubParsersAction,
+) -> None:
+    """Register the ``auto-label`` subcommand."""
+    p = sub.add_parser(
+        "auto-label",
+        help="Auto-label a recorded dataset",
+    )
+    p.add_argument(
+        "--dataset",
+        required=True,
+        help="Path to the dataset directory",
+    )
+    p.add_argument(
+        "--config",
+        default=DEFAULT_CONFIG_PATH,
+        help="Bot config path",
+    )
+    p.add_argument(
+        "--class-map",
+        default=None,
+        help="Path to a JSON class-map file",
+    )
+    p.add_argument(
+        "--threshold",
+        type=float,
+        default=0.3,
+        help="Confidence threshold for labelling",
+    )
+
+
 # -------------------------------------------------------------------
 # Subcommand handlers
 # -------------------------------------------------------------------
 
 
-def _handle_run(args: argparse.Namespace) -> None:
+def _handle_run(args: argparse.Namespace) -> None:  # pragma: no cover
     """Handle the ``run`` subcommand."""
     from semabot.app.factory import create_bot
 
@@ -158,12 +220,13 @@ def _handle_run(args: argparse.Namespace) -> None:
         config_path=args.config,
         game_profile_path=game_profile_path,
         dry_run=args.dry_run,
+        save_detections=args.save_detections,
     )
     logger.info("Starting bot for game '%s'", args.game)
     orchestrator.run(duration=args.duration)
 
 
-def _handle_capture(args: argparse.Namespace) -> None:
+def _handle_capture(args: argparse.Namespace) -> None:  # pragma: no cover
     """Handle the ``capture`` subcommand."""
 
     output_dir = Path(args.output)
@@ -200,7 +263,7 @@ def _make_capture_source(method: str) -> object:
     raise ValueError(msg)
 
 
-def _capture_frames(
+def _capture_frames(  # pragma: no cover
     frame_source: object,
     count: int,
     output_dir: Path,
@@ -229,7 +292,7 @@ def _capture_frames(
     logger.info("Captured %d / %d frames", saved, count)
 
 
-def _handle_detect(args: argparse.Namespace) -> None:
+def _handle_detect(args: argparse.Namespace) -> None:  # pragma: no cover
     """Handle the ``detect`` subcommand."""
     import cv2
 
@@ -269,7 +332,7 @@ def _handle_detect(args: argparse.Namespace) -> None:
         _save_annotated(image, detections, args.output)
 
 
-def _save_annotated(
+def _save_annotated(  # pragma: no cover
     image: object,
     detections: list,
     output_path: str,
@@ -297,7 +360,7 @@ def _save_annotated(
     logger.info("Annotated image saved to %s", output_path)
 
 
-def _handle_export_model(args: argparse.Namespace) -> None:
+def _handle_export_model(args: argparse.Namespace) -> None:  # pragma: no cover
     """Handle the ``export-model`` subcommand."""
     print("Export-model is not yet implemented.")
     print(f"  Output path: {args.output}")
@@ -307,6 +370,62 @@ def _handle_export_model(args: argparse.Namespace) -> None:
     print("  pip install ultralytics")
     print("  yolo export model=yolo11n.pt format=onnx " f"imgsz={args.input_size}")
     print(f"  mv yolo11n.onnx {args.output}")
+
+
+def _handle_record(args: argparse.Namespace) -> None:  # pragma: no cover
+    """Handle the ``record`` subcommand."""
+    from semabot.training.recorder import GameplayRecorder
+
+    frame_source = _make_capture_source(args.method.lower())
+    recorder = GameplayRecorder(
+        frame_source=frame_source,
+        interval_ms=args.interval,
+        output_dir=args.output,
+    )
+    frame_source.start()
+    try:
+        count = recorder.record(duration_s=args.duration)
+    finally:
+        frame_source.stop()
+    logger.info("Recorded %d frames", count)
+
+
+def _handle_auto_label(args: argparse.Namespace) -> None:  # pragma: no cover
+    """Handle the ``auto-label`` subcommand."""
+    import json as _json
+
+    from semabot.core.config import load_config
+    from semabot.intelligence.detector import YoloDetector
+    from semabot.intelligence.preprocessor import (
+        YoloPreprocessor,
+    )
+    from semabot.training.auto_labeler import AutoLabeler
+
+    config = load_config(args.config)
+    preprocessor = YoloPreprocessor(config.detection.input_size)
+    detector = YoloDetector(
+        model_path=config.detection.model_path,
+        provider=config.detection.provider,
+        confidence_threshold=config.detection.confidence_threshold,
+        nms_iou_threshold=config.detection.nms_iou_threshold,
+    )
+
+    class_map: dict[str, int] | None = None
+    if args.class_map is not None:
+        with open(args.class_map, encoding="utf-8") as fh:
+            class_map = _json.load(fh)
+
+    labeler = AutoLabeler(
+        detector=detector,
+        preprocessor=preprocessor,
+        class_map=class_map,
+    )
+    images_dir = str(Path(args.dataset) / "images")
+    count = labeler.label_dataset(
+        images_dir=images_dir,
+        threshold=args.threshold,
+    )
+    logger.info("Labelled %d images", count)
 
 
 # -------------------------------------------------------------------
@@ -329,12 +448,14 @@ def main(argv: list[str] | None = None) -> None:
         "capture": _handle_capture,
         "detect": _handle_detect,
         "export-model": _handle_export_model,
+        "record": _handle_record,
+        "auto-label": _handle_auto_label,
     }
 
     handler = handlers.get(args.command)
     if handler is None:
         print("Usage: semabot <command> [options]")
-        print("Commands: run, capture, detect, export-model")
+        print("Commands: run, capture, detect," " export-model, record, auto-label")
         sys.exit(1)
 
     handler(args)

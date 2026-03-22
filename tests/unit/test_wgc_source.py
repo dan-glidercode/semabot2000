@@ -94,6 +94,42 @@ class TestWGCFrameSourceLifecycle:
 
 
 # -------------------------------------------------------------------
+# Retry logic
+# -------------------------------------------------------------------
+
+
+class TestCreateCaptureWithRetry:
+    """Tests for _create_capture_with_retry."""
+
+    def test_succeeds_on_first_attempt(self) -> None:
+        src = WGCFrameSource(window_title="TestWindow")
+        mock_cls = MagicMock(return_value="capture_obj")
+        result = src._create_capture_with_retry(mock_cls)
+        assert result == "capture_obj"
+        mock_cls.assert_called_once()
+
+    def test_retries_on_failure_then_succeeds(self) -> None:
+        src = WGCFrameSource(window_title="TestWindow")
+        src._RETRY_DELAY = 0.01  # fast retry for test
+        mock_cls = MagicMock(
+            side_effect=[RuntimeError("fail"), "capture_obj"],
+        )
+        result = src._create_capture_with_retry(mock_cls)
+        assert result == "capture_obj"
+        assert mock_cls.call_count == 2
+
+    def test_raises_after_max_retries(self) -> None:
+        src = WGCFrameSource(window_title="TestWindow")
+        src._RETRY_DELAY = 0.01
+        mock_cls = MagicMock(side_effect=RuntimeError("fail"))
+        import pytest
+
+        with pytest.raises(RuntimeError, match="not found after"):
+            src._create_capture_with_retry(mock_cls)
+        assert mock_cls.call_count == src._MAX_RETRIES
+
+
+# -------------------------------------------------------------------
 # Frame buffer (thread-safe storage)
 # -------------------------------------------------------------------
 

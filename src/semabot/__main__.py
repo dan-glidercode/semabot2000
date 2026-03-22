@@ -2,6 +2,6 @@
 
 from __future__ import annotations
 
-from semabot.app.cli import main
+from semabot.app.cli import main  # pragma: no cover
 
-main()
+main()  # pragma: no cover
