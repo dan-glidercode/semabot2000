@@ -114,17 +114,27 @@ class BotOrchestrator:
         )
 
     def _loop(self, duration: float | None) -> None:
-        """Core loop: capture, process, decide, act."""
+        """Core loop: capture, process, decide, act.
+
+        Uses double-buffered capture: the WGC callback fills the
+        frame buffer continuously in a background thread. This loop
+        grabs the latest frame and processes it immediately. If no
+        frame is available yet (startup), waits briefly.
+        """
         frame_count = 0
         start_time = time.monotonic()
         last_fps_log = start_time
         last_metrics_log = start_time
+
+        # Wait for first frame at startup
+        self._wait_for_first_frame()
 
         while self._running:
             if self._should_stop(start_time, duration):
                 break
 
             if not self._tick_safe(frame_count):
+                # No frame yet — brief sleep only during startup
                 time.sleep(0.001)
                 continue
 
@@ -139,6 +149,15 @@ class BotOrchestrator:
                 now,
                 last_metrics_log,
             )
+
+    def _wait_for_first_frame(self) -> None:
+        """Block until the capture source has at least one frame."""
+        for _ in range(100):  # up to ~1s
+            if self._frame_source.get_latest_frame() is not None:
+                logger.info("First frame received.")
+                return
+            time.sleep(0.01)
+        logger.warning("No frame received after 1s — proceeding anyway.")
 
     def _tick_safe(self, frame_count: int) -> bool:
         """Run one pipeline tick, catching non-fatal errors."""

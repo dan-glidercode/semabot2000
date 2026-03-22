@@ -36,6 +36,7 @@ class WGCFrameSource:
         self._window_title = window_title
         self._lock = threading.Lock()
         self._latest_frame: np.ndarray | None = None
+        self._frame_new = threading.Event()
         self._stop_event = threading.Event()
         self._thread: threading.Thread | None = None
         self._capture_control = None
@@ -45,6 +46,7 @@ class WGCFrameSource:
     def start(self) -> None:
         """Launch background capture thread targeting *window_title*."""
         self._stop_event.clear()
+        self._frame_new.clear()
         self._thread = threading.Thread(
             target=self._capture_loop,
             daemon=True,
@@ -58,6 +60,17 @@ class WGCFrameSource:
 
     def get_latest_frame(self) -> np.ndarray | None:
         """Return the most recent BGR frame, or *None*."""
+        with self._lock:
+            return self._latest_frame
+
+    def wait_for_new_frame(self, timeout: float = 0.1) -> np.ndarray | None:
+        """Block until a new frame arrives, then return it.
+
+        Used by the sequential pipeline. For double-buffered mode,
+        use :meth:`get_latest_frame` instead.
+        """
+        self._frame_new.wait(timeout=timeout)
+        self._frame_new.clear()
         with self._lock:
             return self._latest_frame
 
@@ -142,6 +155,7 @@ class WGCFrameSource:
             bgr = _bgra_to_bgr(frame.frame_buffer)
             with source._lock:
                 source._latest_frame = bgr
+            source._frame_new.set()
 
         @capture.event
         def on_closed() -> None:

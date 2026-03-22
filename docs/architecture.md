@@ -27,6 +27,26 @@ The system observes the game through screen capture, understands the scene via Y
 | Act | pydirectinput SendInput | 0.8ms avg | CPU |
 | **Total processing** | **(stages 2-6)** | **37.6ms / 27 FPS** | |
 
+### 1.3 Double-Buffered Pipeline
+
+The orchestrator uses a double-buffered capture pattern:
+
+```
+WGC callback thread (continuous):     Processing thread (main loop):
+┌─────────────────────────────┐       ┌─────────────────────────────┐
+│ Receives frames at ~60 FPS  │       │ Grabs latest frame from     │
+│ Writes to shared buffer     │──────>│ buffer (no wait)            │
+│ Sets frame_new event        │       │ Processes: preprocess +     │
+│                             │       │   detect + decide + act     │
+└─────────────────────────────┘       └─────────────────────────────┘
+```
+
+**Validated speedup**: 1.47x (15 FPS sequential -> 22 FPS double-buffered).
+
+The capture thread fills the buffer independently of processing speed. The main loop always processes the most recent frame, never waiting for capture. This eliminates the ~27ms capture-wait bottleneck.
+
+**Frame-skip was evaluated and rejected**: Roblox renders every frame differently (0% skip rate in testing). Hash-based duplicate detection adds overhead with zero benefit.
+
 ---
 
 ## 2. System Architecture
