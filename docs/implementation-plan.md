@@ -134,11 +134,11 @@ poetry add --group dev <pkg>   # add a dev dependency
 ## Phase 7: Optimization
 
 - [x] **7.1** Spike: benchmark double-buffer vs sequential vs frame-skip
-- [ ] **7.2** Implement double-buffered capture in orchestrator — grab latest frame without waiting
+- [x] **7.2** Implement double-buffered capture in orchestrator — grab latest frame without waiting
 - [x] ~~**7.3** Frame-skip~~ — **DROPPED**: 0% skip rate in Roblox (game renders every frame differently)
-- [ ] **7.4** `check.sh` passes
+- [x] **7.4** `check.sh` passes
 
-> **Milestone 7: "Full Speed"** — 22 FPS (up from 15 FPS sequential). Double-buffer validated at 1.47x speedup in spike.
+> **Milestone 7: "Full Speed"** — 22 FPS (up from 15 FPS sequential). Double-buffer validated at 1.47x speedup in spike. **DONE**
 
 Spike results (2026-03-22, `spikes/double-buffer/double_buffer_spike.py`):
 - Sequential: 68.2ms / 15 FPS (baseline)
@@ -190,6 +190,6 @@ Spike results (2026-03-22, `spikes/double-buffer/double_buffer_spike.py`):
 | 4: Behavior | 8/8 | 8 | "The Bot Can Think" — DONE |
 | 5: Orchestration | 14/14 | 14 | "It's Alive" — DONE |
 | 6: Robustness | 6/6 | 6 | "Rock Solid" — DONE |
-| 7: Optimization | 0/4 | 4 | "Full Speed" — needs Roblox benchmarking |
+| 7: Optimization | 4/4 | 4 | "Full Speed" — DONE (22 FPS, 1.47x) |
 | 8: Training | 6/14 | 14 | "Custom Vision" — 8c-8d need remote GPU |
-| **Total** | **64/76** | **76** | **7/9 milestones done** |
+| **Total** | **68/76** | **76** | **8/9 milestones done** |
