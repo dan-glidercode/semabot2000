@@ -149,11 +149,7 @@ class PipelineMetrics:
         """Log the current summary at INFO level."""
         s = self.summary()
         logger.info(
-            "Pipeline metrics — "
-            "capture=%.1fms preprocess=%.1fms "
-            "detect=%.1fms postprocess=%.1fms "
-            "decide=%.1fms act=%.1fms "
-            "total=%.1fms fps=%.1f",
+            "cap=%.0f pre=%.0f det=%.0f post=%.0f " "dec=%.0f act=%.0f tot=%.0fms fps=%.1f",
             s["capture_ms"],
             s["preprocess_ms"],
             s["detect_ms"],

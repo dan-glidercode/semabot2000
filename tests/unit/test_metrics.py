@@ -138,7 +138,8 @@ class TestPipelineMetrics:
 
         info_records = [r for r in records if r.levelno == logging.INFO]
         assert len(info_records) >= 1
-        assert "Pipeline metrics" in info_records[0].getMessage()
+        msg = info_records[0].getMessage()
+        assert "det=" in msg or "Pipeline metrics" in msg
 
     def test_begin_frame_resets_current(self) -> None:
         """begin_frame starts a fresh timing record."""
