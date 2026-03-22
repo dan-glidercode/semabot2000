@@ -1,0 +1,42 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+dist/
+build/
+
+# Virtual environments
+.venv/
+venv/
+
+# Models — binary weights are not tracked (keep .gitkeep for directory structure)
+models/*
+!models/.gitkeep
+
+# Captures, detection outputs, and training datasets
+captures/
+detections/
+output/
+datasets/
+
+# Logs
+*.log
+
+# IDE
+.vscode/
+.idea/
+
+# OS
+Thumbs.db
+.DS_Store
+
+# Environment
+.env
+
+# Coverage reports
+htmlcov/
+.coverage
+.coverage.*
+
+# Claude Code
+.claude/
