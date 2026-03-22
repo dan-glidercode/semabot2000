@@ -102,7 +102,7 @@ fi
 echo ""
 echo "[4/5] Cognitive complexity (flake8, max=${MAX_COGNITIVE_COMPLEXITY})..."
 if python -m flake8 --max-cognitive-complexity="$MAX_COGNITIVE_COMPLEXITY" \
-    --select=CCR001 "$SRC_DIR" 2>/dev/null; then
+    --select=CCR "$SRC_DIR" 2>/dev/null; then
     pass "All functions within complexity threshold"
 else
     fail "Functions exceed cognitive complexity ${MAX_COGNITIVE_COMPLEXITY}. Refactor into smaller functions."
