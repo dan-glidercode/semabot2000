@@ -156,10 +156,11 @@ poetry add --group dev <pkg>   # add a dev dependency
 - [ ] **8.5** `tests/unit/test_auto_labeler.py` — label format, class mapping, threshold filtering
 - [ ] **8.6** CLI `auto-label` subcommand — `--dataset`, `--config`, `--class-map`, `--threshold`
 
-### 8c: Labeling — Autodistill / Grounding DINO (remote GPU, recommended)
+### 8c: Labeling — Vision LLM + Grounding DINO (remote GPU, recommended)
 
-- [ ] **8.7** `scripts/autodistill_label.py` — Grounding DINO teacher labels from text prompts (zero manual annotation)
-- [ ] **8.8** Ontology config — define text prompt -> class name mapping per game (JSON or in script)
+- [ ] **8.7** `scripts/vision_discover.py` — send sample frames to Claude Vision, output ontology.json (class -> prompt mapping)
+- [ ] **8.8** `scripts/autodistill_label.py` — Grounding DINO reads ontology.json, generates bounding boxes for all frames
+- [ ] **8.8b** Ontology review step — validate/edit ontology.json before running Grounding DINO
 
 ### 8d: Dataset + Training
 
@@ -169,7 +170,7 @@ poetry add --group dev <pkg>   # add a dev dependency
 - [ ] **8.12** Documentation — training workflow in README (record -> autodistill label -> train -> deploy)
 - [ ] **8.13** `check.sh` passes
 
-> **Milestone 8: "Custom Vision"** — Record 60s of gameplay. Grounding DINO auto-labels all frames from text prompts (zero manual annotation). Train YOLO11n on remote GPU. Deploy fine-tuned ONNX model. Bot detects game-specific objects (players, NPCs, items).
+> **Milestone 8: "Custom Vision"** — Record 60s of gameplay. Claude Vision discovers object classes. Grounding DINO auto-labels all frames (zero manual annotation). Train YOLO11n on remote GPU. Deploy fine-tuned model. Bot detects game-specific objects.
 
 ---
 
@@ -185,5 +186,5 @@ poetry add --group dev <pkg>   # add a dev dependency
 | 5: Orchestration | 14 | "It's Alive" — full bot runs |
 | 6: Robustness | 6 | "Rock Solid" — stable + observable |
 | 7: Optimization | 4 | "Full Speed" — 20+ FPS |
-| 8: Training | 13 | "Custom Vision" — Grounding DINO labels + fine-tuned YOLO |
-| **Total** | **75** | **9 milestones** |
+| 8: Training | 14 | "Custom Vision" — Vision LLM + Grounding DINO + fine-tuned YOLO |
+| **Total** | **76** | **9 milestones** |

@@ -442,59 +442,110 @@ The orchestrator owns no business logic. It coordinates. All intelligence lives 
 The training pipeline runs offline and is not part of the real-time bot loop. It produces a fine-tuned ONNX model that replaces the pretrained one.
 
 Two labeling strategies are supported:
-- **Autodistill (recommended)** — Grounding DINO teacher model auto-labels from text prompts. Zero manual annotation. Runs on the remote GPU.
-- **YOLO auto-label + manual review (fallback)** — Pre-label with COCO YOLO locally, review/correct in Label Studio or CVAT. More accurate but requires manual effort.
+- **Vision LLM + Grounding DINO + Autodistill (recommended)** — Claude/GPT Vision discovers what's in each scene, Grounding DINO generates precise bounding boxes from those labels, YOLO trains on the result. Zero manual annotation.
+- **YOLO auto-label + manual review (fallback)** — Pre-label with COCO YOLO locally, review/correct in Label Studio or CVAT.
 
 ```
  Local machine (GTX 960M)                Remote GPU (RTX PRO 6000, 96GB VRAM)
  ┌──────────────────────────┐            ┌──────────────────────────────────┐
- │ 1. RECORD                │            │                                  │
- │ semabot record           │            │ 2. AUTO-LABEL (teacher model)    │
- │ WGC capture at interval  │── images/ ─│ Grounding DINO / DINO-X          │
- │ while user plays         │            │ Text prompts: "roblox character, │
- └──────────────────────────┘            │  item, NPC, obstacle, shop"      │
-                                         │ -> YOLO-format .txt labels       │
-      OR (fallback):                     │ Optional: + SAM2 for masks       │
- ┌──────────────────────────┐            ├──────────────────────────────────┤
- │ 2b. LOCAL AUTO-LABEL     │            │ 3. TRAIN (student model)         │
- │ semabot auto-label       │            │ scripts/train.py                 │
- │ Pre-label with COCO YOLO │            │ YOLO11n fine-tune from labels    │
- │ Review in Label Studio   │── labels/ ─│ epochs=100, batch=64             │
- └──────────────────────────┘            │ Also benchmark 11s/11m variants  │
+ │ 1. RECORD                │            │ 2. VISION LLM DISCOVERY          │
+ │ semabot record           │            │ scripts/vision_discover.py       │
+ │ WGC capture at interval  │── images/ ─│ Sample frames -> Claude Vision   │
+ │ while user plays         │            │ "What objects are in this game?" │
+ └──────────────────────────┘            │ -> candidate class labels        │
+                                         │    + text prompt ontology        │
+      OR (fallback):                     ├──────────────────────────────────┤
+ ┌──────────────────────────┐            │ 3. GROUNDING DINO LABELING       │
+ │ 2b. LOCAL AUTO-LABEL     │            │ scripts/autodistill_label.py     │
+ │ semabot auto-label       │            │ Text prompts from step 2 ->     │
+ │ Pre-label with COCO YOLO │            │ precise bounding boxes per frame │
+ │ Review in Label Studio   │── labels/ ─│ -> YOLO-format .txt labels       │
+ └──────────────────────────┘            ├──────────────────────────────────┤
+                                         │ 4. TRAIN (student model)         │
+                                         │ scripts/train.py                 │
+                                         │ YOLO11n fine-tune on labels      │
+                                         │ epochs=100, batch=64             │
                                          ├──────────────────────────────────┤
-                                         │ 4. EXPORT                        │
+                                         │ 5. EXPORT                        │
  ┌──────────────────────────┐            │ yolo export format=onnx          │
- │ 5. DEPLOY                │◄── .onnx ──│ Copy to local machine            │
+ │ 6. DEPLOY                │◄── .onnx ──│ Copy to local machine            │
  │ Drop .onnx into models/  │            └──────────────────────────────────┘
  │ Update config class_names│
  └──────────────────────────┘
 ```
 
-#### Autodistill Strategy (Zero Manual Annotation)
+#### Vision LLM Discovery (Step 2)
 
-[Grounding DINO](https://github.com/IDEA-Research/GroundingDINO) acts as a "teacher" that can detect any object described in natural language, without training. It labels the dataset, then YOLO11n (the "student") trains on those labels to run at real-time speed.
+A frontier vision model (Claude, GPT-4V) analyzes a sample of recorded frames to discover what object classes exist in the game. This is the "semantic understanding" step — the LLM understands game context that no detection model can infer.
+
+```python
+# scripts/vision_discover.py — uses Anthropic API
+# Sends a sample of frames to Claude Vision and asks it to identify
+# all distinct object types, producing a text prompt ontology.
+
+import anthropic, base64, json
+
+client = anthropic.Anthropic()
+
+# Send ~10-20 diverse frames
+response = client.messages.create(
+    model="claude-sonnet-4-20250514",
+    max_tokens=1024,
+    messages=[{
+        "role": "user",
+        "content": [
+            {"type": "image", "source": {"type": "base64", "media_type": "image/png",
+             "data": base64.b64encode(open(frame_path, "rb").read()).decode()}},
+            # ... more frames ...
+            {"type": "text", "text": """Analyze these Roblox game screenshots.
+            List every distinct type of object, character, or UI element you see.
+            For each, provide:
+            1. A short descriptive name (e.g., "player_character")
+            2. A natural language description for detection (e.g., "blocky roblox character with legs")
+            Output as JSON: {"class_name": "detection_prompt", ...}"""}
+        ]
+    }]
+)
+
+# Output: ontology.json
+# {"player": "blocky roblox character", "npc_enemy": "red enemy character", ...}
+```
+
+**Why this step matters**: Grounding DINO needs good text prompts to generate accurate boxes. A human might write "roblox character", but Claude Vision can distinguish "player character with blue hat" from "NPC shopkeeper behind counter" from "enemy with red outline" — prompts that produce far better detection quality.
+
+#### Grounding DINO Labeling (Step 3)
+
+[Grounding DINO](https://github.com/IDEA-Research/GroundingDINO) takes the ontology from the Vision LLM and generates precise bounding boxes for every frame.
 
 ```python
 # scripts/autodistill_label.py — runs on remote GPU (RTX PRO 6000)
 from autodistill_grounding_dino import GroundingDINO
 from autodistill.detection import CaptionOntology
+import json
 
-# Define what to detect with text prompts
-ontology = CaptionOntology({
-    "roblox character": "player",
-    "NPC enemy": "npc",
-    "collectible item": "item",
-    "shop sign": "shop",
-    "obstacle": "obstacle",
-})
+# Load ontology discovered by Vision LLM
+with open("datasets/my_recording/ontology.json") as f:
+    mapping = json.load(f)
 
+ontology = CaptionOntology(mapping)
 teacher = GroundingDINO(ontology=ontology, box_threshold=0.3)
-teacher.label(input_folder="datasets/my_recording/images/", output_folder="datasets/my_recording/")
+teacher.label(
+    input_folder="datasets/my_recording/images/",
+    output_folder="datasets/my_recording/",
+)
 ```
 
-This produces YOLO-format labels in seconds without any manual annotation. The labels can optionally be reviewed, but for many game scenarios the quality is sufficient to train directly.
+Each model contributes its strength to the pipeline:
 
-Key dependencies (remote GPU only): `autodistill`, `autodistill-grounding-dino`, `autodistill-yolov8` (or ultralytics directly).
+| Model | Role | Strength | Weakness |
+|-------|------|----------|----------|
+| **Claude Vision** | Discover classes | Understands game context, finds subtle objects | No bounding boxes |
+| **Grounding DINO** | Generate boxes | Precise spatial detection from text | Needs good prompts |
+| **YOLO11n** | Production inference | 26ms real-time on GTX 960M | Needs training data |
+
+This produces YOLO-format labels with zero manual annotation. The labels can optionally be reviewed, but for many game scenarios the quality is sufficient to train directly.
+
+Key dependencies (remote GPU only): `autodistill`, `autodistill-grounding-dino`, `anthropic` (for Vision LLM step).
 
 #### GameplayRecorder
 
@@ -659,6 +710,7 @@ SeMaBot2000/
 |-- scripts/
 |   |-- check.sh                       # Quality gate (black + ruff + pytest 90%+)
 |   |-- export_model.py                # Download YOLO11n weights + export to ONNX
+|   |-- vision_discover.py             # Claude Vision class discovery (API call)
 |   |-- autodistill_label.py           # Grounding DINO teacher labeling (remote GPU)
 |   |-- train.py                       # YOLO fine-tuning + ONNX export (remote GPU)
 |
